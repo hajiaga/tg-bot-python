@@ -1,0 +1,7 @@
+requests
+beautifulsoup4
+pymongo
+python-telegram-bot
+apscheduler
+fastapi
+uvicorn
