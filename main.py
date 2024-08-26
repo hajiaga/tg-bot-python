@@ -5,6 +5,8 @@ from parsers.bina_parser import parse_bina_ads
 from parsers.database import save_ad_to_db, check_if_ad_exists, ads_collection
 from datetime import datetime, timedelta
 from bson import ObjectId
+from config import BOT_TOKEN, CHAT_ID
+from telegram import Bot
 
 app = FastAPI()
 
@@ -14,10 +16,17 @@ templates = Jinja2Templates(directory="templates")
 # Создаем планировщик
 scheduler = AsyncIOScheduler()
 
+# Функция для отправки уведомления о перезапуске
+async def send_startup_message():
+    bot = Bot(token=BOT_TOKEN)
+    message = "Бот был перезапущен и снова активен."
+    await bot.send_message(chat_id=CHAT_ID, text=message)
+
 @app.on_event("startup")
 async def start_scheduler():
     scheduler.start()
     scheduler.add_job(fetch_and_save_new_ads, 'interval', minutes=10)
+    await send_startup_message()  # Отправляем уведомление о перезапуске
 
 @app.on_event("shutdown")
 async def shutdown_scheduler():
@@ -31,8 +40,6 @@ async def fetch_and_save_new_ads():
             await send_to_telegram(ad)        # Отправляем в Telegram
 
 async def send_to_telegram(ad):
-    from config import BOT_TOKEN, CHAT_ID
-    from telegram import Bot
     bot = Bot(token=BOT_TOKEN)
     message = f"Новое объявление: {ad['title']}\nЦена: {ad['price']}\nСсылка: {ad['link']}"
     await bot.send_message(chat_id=CHAT_ID, text=message)
