@@ -3,10 +3,9 @@ from fastapi.templating import Jinja2Templates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from parsers.bina_parser import parse_bina_ads
 from parsers.database import save_ad_to_db, check_if_ad_exists, ads_collection
+from analytics import analyze_data  # Импорт аналитического модуля
 from datetime import datetime, timedelta
 from bson import ObjectId
-from config import BOT_TOKEN, CHAT_ID
-from telegram import Bot
 
 app = FastAPI()
 
@@ -16,17 +15,11 @@ templates = Jinja2Templates(directory="templates")
 # Создаем планировщик
 scheduler = AsyncIOScheduler()
 
-# Функция для отправки уведомления о перезапуске
-async def send_startup_message():
-    bot = Bot(token=BOT_TOKEN)
-    message = "Бот был перезапущен и снова активен."
-    await bot.send_message(chat_id=CHAT_ID, text=message)
-
 @app.on_event("startup")
 async def start_scheduler():
     scheduler.start()
     scheduler.add_job(fetch_and_save_new_ads, 'interval', minutes=10)
-    await send_startup_message()  # Отправляем уведомление о перезапуске
+    scheduler.add_job(send_daily_report, 'cron', hour=23, minute=59)  # Запускаем отчет каждый вечер
 
 @app.on_event("shutdown")
 async def shutdown_scheduler():
@@ -40,8 +33,23 @@ async def fetch_and_save_new_ads():
             await send_to_telegram(ad)        # Отправляем в Telegram
 
 async def send_to_telegram(ad):
+    from config import BOT_TOKEN, CHAT_ID
+    from telegram import Bot
     bot = Bot(token=BOT_TOKEN)
     message = f"Новое объявление: {ad['title']}\nЦена: {ad['price']}\nСсылка: {ad['link']}"
+    await bot.send_message(chat_id=CHAT_ID, text=message)
+
+# Отправка ежедневного отчета
+async def send_daily_report():
+    from config import BOT_TOKEN, CHAT_ID
+    from telegram import Bot
+    bot = Bot(token=BOT_TOKEN)
+    
+    analysis = await analyze_data()
+    message = (f"Ежедневный отчет:\n"
+               f"Всего объявлений: {analysis['total_ads']}\n"
+               f"Средняя цена за квадратный метр: {analysis['avg_price_per_sqm']:.2f} AZN")
+    
     await bot.send_message(chat_id=CHAT_ID, text=message)
 
 # Маршрут для главной страницы
