@@ -6,5 +6,5 @@ DATABASE_NAME = "bina_ads"
 COLLECTION_NAME = "ads"
 
 # Конфигурация Telegram бота
-BOT_TOKEN = "1447044175:AAEbx-WaYvf-YctPeamnaBJ8Kv4AktvNVIo"
+BOT_TOKEN = "1447044175:AAE3wgtczA7db1iG_L8ofODItACGjUnlpls"
 CHAT_ID = "-4573303779"
