@@ -1,36 +1,38 @@
 from parsers.database import ads_collection
 from datetime import datetime, timedelta
 
-async def analyze_data():
-    # Получаем текущую дату
-    now = datetime.now()
-    one_day_ago = now - timedelta(days=1)
+async def get_average_price_per_square_meter():
+    """
+    Возвращает среднюю цену за квадратный метр на основе объявлений в базе данных.
+    """
+    pipeline = [
+        {"$match": {"price": {"$exists": True}, "title": {"$regex": r"\d+\s*m²"}}},
+        {
+            "$project": {
+                "price": 1,
+                "square_meter": {
+                    "$toDouble": {"$arrayElemAt": [{"$split": ["$title", " m²"]}, 0]}
+                },
+            }
+        },
+        {"$project": {"price_per_square_meter": {"$divide": ["$price", "$square_meter"]}}},
+        {"$group": {"_id": None, "avg_price_per_sqm": {"$avg": "$price_per_square_meter"}}},
+    ]
     
-    # Запрос всех объявлений за последние 24 часа
-    recent_ads = await ads_collection.find({
-        "_id": {"$gte": ObjectId.from_datetime(one_day_ago)}
-    }).to_list(length=None)
+    result = await ads_collection.aggregate(pipeline).to_list(1)
+    return result[0]["avg_price_per_sqm"] if result else None
 
-    total_price = 0
-    total_area = 0
-    total_ads = len(recent_ads)
-
-    for ad in recent_ads:
-        # Извлечение площади и цены
-        try:
-            area = float(ad['title'].split(',')[1].strip().split()[0])
-            price = float(ad['price'].split()[0].replace(",", ""))
-            total_price += price
-            total_area += area
-        except (ValueError, IndexError):
-            continue
-
-    if total_area > 0:
-        avg_price_per_sqm = total_price / total_area
-    else:
-        avg_price_per_sqm = 0
-
-    return {
-        "total_ads": total_ads,
-        "avg_price_per_sqm": avg_price_per_sqm
-    }
+async def get_price_dynamics(days=7):
+    """
+    Возвращает динамику роста/падения цен за последние n дней.
+    """
+    now = datetime.now()
+    start_date = now - timedelta(days=days)
+    
+    pipeline = [
+        {"$match": {"_id": {"$gte": ObjectId.from_datetime(start_date)}}},
+        {"$group": {"_id": None, "average_price": {"$avg": "$price"}}},
+    ]
+    
+    result = await ads_collection.aggregate(pipeline).to_list(1)
+    return result[0]["average_price"] if result else None
