@@ -46,11 +46,13 @@ async def send_daily_report():
     bot = Bot(token=BOT_TOKEN)
     
     analysis = await analyze_data()
-    message = (f"Ежедневный отчет:\n"
-               f"Всего объявлений: {analysis['total_ads']}\n"
-               f"Средняя цена за квадратный метр: {analysis['avg_price_per_sqm']:.2f} AZN")
-    
-    await bot.send_message(chat_id=CHAT_ID, text=message)
+    if analysis:
+        message = (f"Ежедневный отчет:\n"
+                   f"Всего объявлений: {analysis['total_ads']}\n"
+                   f"Средняя цена за квадратный метр: {analysis['avg_price_per_sqm']:.2f} AZN")
+        await bot.send_message(chat_id=CHAT_ID, text=message)
+    else:
+        await bot.send_message(chat_id=CHAT_ID, text="Нет данных для анализа.")
 
 # Маршрут для главной страницы
 @app.get("/")
