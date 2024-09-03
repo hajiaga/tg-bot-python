@@ -4,11 +4,11 @@ from fastapi.templating import Jinja2Templates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from parsers.bina_parser import parse_bina_ads
 from parsers.database import save_ad_to_db, check_if_ad_exists, ads_collection
-from analytics import analyze_data  # Импорт аналитического модуля
+from analytics import analyze_data  # Ensure this exists and is correctly imported
 from datetime import datetime, timedelta
 from bson import ObjectId
 
-# Initialize FastAPI app
+# Define the FastAPI app instance
 app = FastAPI()
 
 # Setup Jinja2 templates
