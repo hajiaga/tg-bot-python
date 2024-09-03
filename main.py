@@ -57,9 +57,28 @@ async def send_daily_report():
         logger.info(f"Результат анализа: {analysis}")
 
         if analysis:
-            message = (f"Ежедневный отчет:\n"
-                       f"Всего объявлений: {analysis['total_ads']}\n"
-                       f"Средняя цена за квадратный метр: {analysis['avg_price_per_sqm']:.2f} AZN")
+            avg_price_per_sqm = analysis.get('avg_price_per_sqm')
+            total_ads = analysis.get('total_ads')
+            price_dynamics = analysis.get('price_dynamics')
+
+            if avg_price_per_sqm is not None:
+                message = (
+                    f"Ежедневный отчет:\n"
+                    f"Всего объявлений: {total_ads}\n"
+                    f"Средняя цена за квадратный метр: {avg_price_per_sqm:.2f} AZN"
+                )
+            else:
+                message = (
+                    f"Ежедневный отчет:\n"
+                    f"Всего объявлений: {total_ads}\n"
+                    f"Средняя цена за квадратный метр: данные отсутствуют"
+                )
+
+            if price_dynamics is not None:
+                message += f"\nДинамика изменения цен за последние 7 дней: {price_dynamics:.2f} AZN"
+            else:
+                message += f"\nДинамика изменения цен за последние 7 дней: данные отсутствуют"
+
             await bot.send_message(chat_id=CHAT_ID, text=message)
             logger.info("Отчет успешно отправлен")
         else:
