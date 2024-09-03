@@ -15,7 +15,22 @@ async def get_average_price_per_square_meter():
             {
                 "$project": {
                     "price": {
-                        "$toDouble": "$price"
+                        "$convert": {
+                            "input": {
+                                "$trim": {
+                                    "input": {
+                                        "$replaceAll": {
+                                            "input": "$price",
+                                            "find": "AZN",
+                                            "replacement": ""
+                                        }
+                                    }
+                                }
+                            },
+                            "to": "double",
+                            "onError": 0,
+                            "onNull": 0
+                        }
                     },
                     "square_meter": {
                         "$convert": {
