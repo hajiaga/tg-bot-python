@@ -42,7 +42,16 @@ async def get_average_price_per_square_meter():
                     },
                 }
             },
-            {"$project": {"price_per_square_meter": {"$divide": ["$price", "$square_meter"]}}},
+            {
+                "$match": {
+                    "square_meter": {"$gt": 0}  # Фильтруем только те документы, у которых площадь больше 0
+                }
+            },
+            {
+                "$project": {
+                    "price_per_square_meter": {"$divide": ["$price", "$square_meter"]}
+                }
+            },
             {"$group": {"_id": None, "avg_price_per_sqm": {"$avg": "$price_per_square_meter"}}},
         ]
         
