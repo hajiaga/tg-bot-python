@@ -57,3 +57,20 @@ async def get_price_dynamics(days=7):
     except Exception as e:
         logging.error(f"Ошибка при расчете динамики цен: {e}")
         raise
+
+async def analyze_data():
+    """
+    Функция для объединения анализа средней цены за квадратный метр и динамики цен.
+    """
+    try:
+        avg_price_per_sqm = await get_average_price_per_square_meter()
+        price_dynamics = await get_price_dynamics(days=7)
+        
+        return {
+            "avg_price_per_sqm": avg_price_per_sqm,
+            "price_dynamics": price_dynamics,
+            "total_ads": await ads_collection.count_documents({})
+        }
+    except Exception as e:
+        logging.error(f"Ошибка при анализе данных: {e}")
+        raise
