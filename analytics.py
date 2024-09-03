@@ -1,6 +1,6 @@
 from parsers.database import ads_collection
+from bson import ObjectId
 from datetime import datetime, timedelta
-import re
 
 async def get_average_price_per_square_meter():
     """
@@ -10,13 +10,15 @@ async def get_average_price_per_square_meter():
         {"$match": {"price": {"$exists": True}, "title": {"$regex": r"\d+\s*m²"}}},
         {
             "$project": {
-                "price": 1,
+                "price": {
+                    "$toDouble": "$price"
+                },
                 "square_meter": {
-                    # Извлечение числового значения из строки
-                    "$toDouble": {
-                        "$arrayElemAt": [
-                            {"$split": [{"$arrayElemAt": [{"$split": ["$title", ", "]}, 1]}, " m²"]}, 0
-                        ]
+                    "$convert": {
+                        "input": {"$arrayElemAt": [{"$split": ["$title", " m²"]}, 0]},
+                        "to": "double",
+                        "onError": 0,
+                        "onNull": 0
                     }
                 },
             }
@@ -42,15 +44,3 @@ async def get_price_dynamics(days=7):
     
     result = await ads_collection.aggregate(pipeline).to_list(1)
     return result[0]["average_price"] if result else None
-
-async def analyze_data():
-    """
-    Выполняет анализ данных и возвращает результаты.
-    """
-    total_ads = await ads_collection.count_documents({})
-    avg_price_per_sqm = await get_average_price_per_square_meter()
-    
-    return {
-        "total_ads": total_ads,
-        "avg_price_per_sqm": avg_price_per_sqm,
-    }
