@@ -1,18 +1,6 @@
 from parsers.database import ads_collection
 from datetime import datetime, timedelta
-from bson import ObjectId
-
-async def analyze_data():
-    """
-    Выполняет анализ данных и возвращает результат в виде словаря.
-    """
-    total_ads = await ads_collection.count_documents({})
-    avg_price_per_sqm = await get_average_price_per_square_meter()
-
-    return {
-        "total_ads": total_ads,
-        "avg_price_per_sqm": avg_price_per_sqm
-    }
+import re
 
 async def get_average_price_per_square_meter():
     """
@@ -22,13 +10,14 @@ async def get_average_price_per_square_meter():
         {"$match": {"price": {"$exists": True}, "title": {"$regex": r"\d+\s*m²"}}},
         {
             "$project": {
-                "price": {
-                    "$toDouble": {
-                        "$replaceAll": {"input": {"$replaceAll": {"input": "$price", "find": " AZN", "replacement": ""}}, "find": " ", "replacement": ""}
-                    }
-                },
+                "price": 1,
                 "square_meter": {
-                    "$toDouble": {"$arrayElemAt": [{"$split": ["$title", " m²"]}, -2]}
+                    # Извлечение числового значения из строки
+                    "$toDouble": {
+                        "$arrayElemAt": [
+                            {"$split": [{"$arrayElemAt": [{"$split": ["$title", ", "]}, 1]}, " m²"]}, 0
+                        ]
+                    }
                 },
             }
         },
@@ -38,3 +27,30 @@ async def get_average_price_per_square_meter():
     
     result = await ads_collection.aggregate(pipeline).to_list(1)
     return result[0]["avg_price_per_sqm"] if result else None
+
+async def get_price_dynamics(days=7):
+    """
+    Возвращает динамику роста/падения цен за последние n дней.
+    """
+    now = datetime.now()
+    start_date = now - timedelta(days=days)
+    
+    pipeline = [
+        {"$match": {"_id": {"$gte": ObjectId.from_datetime(start_date)}}},
+        {"$group": {"_id": None, "average_price": {"$avg": "$price"}}},    
+    ]
+    
+    result = await ads_collection.aggregate(pipeline).to_list(1)
+    return result[0]["average_price"] if result else None
+
+async def analyze_data():
+    """
+    Выполняет анализ данных и возвращает результаты.
+    """
+    total_ads = await ads_collection.count_documents({})
+    avg_price_per_sqm = await get_average_price_per_square_meter()
+    
+    return {
+        "total_ads": total_ads,
+        "avg_price_per_sqm": avg_price_per_sqm,
+    }
