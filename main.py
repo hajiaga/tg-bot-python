@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -12,6 +13,10 @@ app = FastAPI()
 # Подключение Jinja2
 templates = Jinja2Templates(directory="templates")
 
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Создаем планировщик
 scheduler = AsyncIOScheduler()
 
@@ -19,7 +24,7 @@ scheduler = AsyncIOScheduler()
 async def start_scheduler():
     scheduler.start()
     scheduler.add_job(fetch_and_save_new_ads, 'interval', minutes=10)
-    scheduler.add_job(send_daily_report, 'cron', hour=23, minute=59)  # Запускаем отчет каждый вечер
+    scheduler.add_job(send_daily_report, 'interval', minutes=2)  # Запускаем отчет каждые 2 минуты для тестирования
 
 @app.on_event("shutdown")
 async def shutdown_scheduler():
@@ -39,20 +44,32 @@ async def send_to_telegram(ad):
     message = f"Новое объявление: {ad['title']}\nЦена: {ad['price']}\nСсылка: {ad['link']}"
     await bot.send_message(chat_id=CHAT_ID, text=message)
 
-# Отправка ежедневного отчета
+# Отправка ежедневного отчета с логированием
 async def send_daily_report():
     from config import BOT_TOKEN, CHAT_ID
     from telegram import Bot
     bot = Bot(token=BOT_TOKEN)
-    
-    analysis = await analyze_data()
-    if analysis:
-        message = (f"Ежедневный отчет:\n"
-                   f"Всего объявлений: {analysis['total_ads']}\n"
-                   f"Средняя цена за квадратный метр: {analysis['avg_price_per_sqm']:.2f} AZN")
-        await bot.send_message(chat_id=CHAT_ID, text=message)
-    else:
-        await bot.send_message(chat_id=CHAT_ID, text="Нет данных для анализа.")
+
+    logger.info("Запуск отправки ежедневного отчета")
+
+    try:
+        analysis = await analyze_data()
+        logger.info(f"Результат анализа: {analysis}")
+
+        if analysis:
+            message = (f"Ежедневный отчет:\n"
+                       f"Всего объявлений: {analysis['total_ads']}\n"
+                       f"Средняя цена за квадратный метр: {analysis['avg_price_per_sqm']:.2f} AZN")
+            await bot.send_message(chat_id=CHAT_ID, text=message)
+            logger.info("Отчет успешно отправлен")
+        else:
+            warning_msg = "Анализ не дал результатов"
+            await bot.send_message(chat_id=CHAT_ID, text=warning_msg)
+            logger.warning(warning_msg)
+    except Exception as e:
+        error_msg = f"Ошибка при отправке отчета: {e}"
+        await bot.send_message(chat_id=CHAT_ID, text=error_msg)
+        logger.error(error_msg)
 
 # Маршрут для главной страницы
 @app.get("/")
