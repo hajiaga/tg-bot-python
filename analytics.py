@@ -1,7 +1,7 @@
-import logging
 from parsers.database import ads_collection
 from bson import ObjectId
 from datetime import datetime, timedelta
+import logging
 
 logging.basicConfig(level=logging.INFO)
 
@@ -17,7 +17,7 @@ async def get_average_price_per_square_meter():
                     "price": {
                         "$toDouble": {
                             "$arrayElemAt": [
-                                {"$split": ["$price", " "]}, 0  # Extracting the numeric part of the price
+                                {"$split": ["$price", " "]}, 0
                             ]
                         }
                     },
@@ -31,6 +31,7 @@ async def get_average_price_per_square_meter():
                     },
                 }
             },
+            {"$match": {"square_meter": {"$gt": 0}}},
             {"$project": {"price_per_square_meter": {"$divide": ["$price", "$square_meter"]}}},
             {"$group": {"_id": None, "avg_price_per_sqm": {"$avg": "$price_per_square_meter"}}},
         ]
@@ -52,7 +53,12 @@ async def get_price_dynamics(days=7):
         
         pipeline = [
             {"$match": {"_id": {"$gte": ObjectId.from_datetime(start_date)}}},
-            {"$group": {"_id": None, "average_price": {"$avg": "$price"}}},    
+            {
+                "$group": {
+                    "_id": None,
+                    "average_price": {"$avg": {"$toDouble": {"$arrayElemAt": [{"$split": ["$price", " "]}, 0]}}}
+                }
+            },    
         ]
         
         result = await ads_collection.aggregate(pipeline).to_list(1)
@@ -61,21 +67,3 @@ async def get_price_dynamics(days=7):
     except Exception as e:
         logging.error(f"Ошибка при расчете динамики цен: {e}")
         raise
-
-async def analyze_data():
-    """
-    Анализирует данные и возвращает словарь с результатами.
-    """
-    try:
-        avg_price_per_sqm = await get_average_price_per_square_meter()
-        price_dynamics = await get_price_dynamics(days=7)
-        total_ads = await ads_collection.count_documents({})
-
-        return {
-            "avg_price_per_sqm": avg_price_per_sqm,
-            "price_dynamics": price_dynamics,
-            "total_ads": total_ads,
-        }
-    except Exception as e:
-        logging.error(f"Ошибка при анализе данных: {e}")
-        return None
