@@ -2,59 +2,62 @@ from parsers.database import ads_collection
 from bson import ObjectId
 from datetime import datetime, timedelta
 import logging
+import re
 
 logging.basicConfig(level=logging.INFO)
 
+def extract_price(price_str):
+    """
+    Преобразует цену из строки в число.
+    """
+    try:
+        return float(re.sub(r'[^\d]', '', price_str))  # Удаляет все символы, кроме цифр
+    except ValueError:
+        return None
+
+def extract_square_meter(title_str):
+    """
+    Преобразует площадь из строки в число.
+    """
+    try:
+        match = re.search(r'(\d+\.\d+|\d+)\s*m²', title_str)
+        if match:
+            return float(match.group(1))
+        return None
+    except ValueError:
+        return None
+
 async def get_average_price_per_square_meter():
-    """
-    Возвращает среднюю цену за квадратный метр на основе объявлений в базе данных.
-    """
     try:
         pipeline = [
             {"$match": {"price": {"$exists": True}, "title": {"$regex": r"\d+\s*m²"}}},
             {
                 "$project": {
                     "price": {
-                        "$convert": {
-                            "input": {
-                                "$trim": {
-                                    "input": {
-                                        "$replaceAll": {
-                                            "input": "$price",
-                                            "find": "AZN",
-                                            "replacement": ""
-                                        }
-                                    }
-                                }
-                            },
-                            "to": "double",
-                            "onError": 0,
-                            "onNull": 0
+                        "$toDouble": {
+                            "$convert": {
+                                "input": {"$substr": [{"$arrayElemAt": [{"$split": ["$price", " "]}, 0]}, 0, -1]},
+                                "to": "double",
+                                "onError": None,
+                                "onNull": None
+                            }
                         }
                     },
                     "square_meter": {
                         "$convert": {
                             "input": {"$arrayElemAt": [{"$split": ["$title", " m²"]}, 0]},
                             "to": "double",
-                            "onError": 0,
-                            "onNull": 0
+                            "onError": None,
+                            "onNull": None
                         }
                     },
                 }
             },
-            {
-                "$match": {
-                    "square_meter": {"$gt": 0}  # Фильтруем только те документы, у которых площадь больше 0
-                }
-            },
-            {
-                "$project": {
-                    "price_per_square_meter": {"$divide": ["$price", "$square_meter"]}
-                }
-            },
+            {"$project": {"price_per_square_meter": {"$divide": ["$price", "$square_meter"]}}},
+            {"$match": {"price_per_square_meter": {"$ne": None, "$ne": 0}}},
             {"$group": {"_id": None, "avg_price_per_sqm": {"$avg": "$price_per_square_meter"}}},
         ]
-        
+
         result = await ads_collection.aggregate(pipeline).to_list(1)
         logging.info(f"Pipeline result: {result}")
         return result[0]["avg_price_per_sqm"] if result else None
@@ -63,38 +66,30 @@ async def get_average_price_per_square_meter():
         raise
 
 async def get_price_dynamics(days=7):
-    """
-    Возвращает динамику роста/падения цен за последние n дней.
-    """
     try:
         now = datetime.now()
         start_date = now - timedelta(days=days)
-        
+
         pipeline = [
             {"$match": {"_id": {"$gte": ObjectId.from_datetime(start_date)}}},
-            {"$group": {"_id": None, "average_price": {"$avg": "$price"}}},    
+            {"$project": {
+                "price": {
+                    "$toDouble": {
+                        "$convert": {
+                            "input": {"$substr": [{"$arrayElemAt": [{"$split": ["$price", " "]}, 0]}, 0, -1]},
+                            "to": "double",
+                            "onError": None,
+                            "onNull": None
+                        }
+                    }
+                }
+            }},
+            {"$group": {"_id": None, "average_price": {"$avg": "$price"}}},
         ]
-        
+
         result = await ads_collection.aggregate(pipeline).to_list(1)
         logging.info(f"Pipeline result: {result}")
         return result[0]["average_price"] if result else None
     except Exception as e:
         logging.error(f"Ошибка при расчете динамики цен: {e}")
-        raise
-
-async def analyze_data():
-    """
-    Функция для объединения анализа средней цены за квадратный метр и динамики цен.
-    """
-    try:
-        avg_price_per_sqm = await get_average_price_per_square_meter()
-        price_dynamics = await get_price_dynamics(days=7)
-        
-        return {
-            "avg_price_per_sqm": avg_price_per_sqm,
-            "price_dynamics": price_dynamics,
-            "total_ads": await ads_collection.count_documents({})
-        }
-    except Exception as e:
-        logging.error(f"Ошибка при анализе данных: {e}")
         raise
