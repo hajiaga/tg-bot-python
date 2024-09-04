@@ -22,9 +22,11 @@ scheduler = AsyncIOScheduler()
 
 @app.on_event("startup")
 async def start_scheduler():
+    logger.info("Scheduler starting...")
     scheduler.start()
     scheduler.add_job(fetch_and_save_new_ads, 'interval', minutes=10)
     scheduler.add_job(send_daily_report, 'interval', minutes=2)  # Запускаем отчет каждые 2 минуты для тестирования
+    logger.info("Scheduler started successfully.")
 
 @app.on_event("shutdown")
 async def shutdown_scheduler():
@@ -56,21 +58,20 @@ async def send_daily_report():
         avg_price_per_sqm = await get_average_price_per_square_meter()
         price_dynamics = await get_price_dynamics()
 
-        if avg_price_per_sqm or price_dynamics:
-            message = (
-                f"Ежедневный отчет:\n"
-                f"Средняя цена за квадратный метр: {avg_price_per_sqm:.2f} AZN" if avg_price_per_sqm else "Средняя цена за квадратный метр: данные отсутствуют"
-            )
-            message += (
-                f"\nДинамика изменения цен за последние 7 дней: {price_dynamics:.2f} AZN" if price_dynamics else "\nДинамика изменения цен за последние 7 дней: данные отсутствуют"
-            )
-
-            await bot.send_message(chat_id=CHAT_ID, text=message)
-            logger.info("Отчет успешно отправлен")
+        message = ""
+        if avg_price_per_sqm is not None:
+            message += f"Средняя цена за квадратный метр: {avg_price_per_sqm:.2f} AZN\n"
         else:
-            warning_msg = "Анализ не дал результатов"
-            await bot.send_message(chat_id=CHAT_ID, text=warning_msg)
-            logger.warning(warning_msg)
+            message += "Средняя цена за квадратный метр: данные отсутствуют\n"
+            
+        if price_dynamics is not None:
+            message += f"Динамика изменения цен за последние 7 дней: {price_dynamics:.2f} AZN\n"
+        else:
+            message += "Динамика изменения цен за последние 7 дней: данные отсутствуют\n"
+
+        await bot.send_message(chat_id=CHAT_ID, text=f"Ежедневный отчет:\n{message}")
+        logger.info("Отчет успешно отправлен")
+
     except Exception as e:
         error_msg = f"Ошибка при отправке отчета: {e}"
         await bot.send_message(chat_id=CHAT_ID, text=error_msg)

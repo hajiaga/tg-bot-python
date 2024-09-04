@@ -1,7 +1,7 @@
+import logging
 from parsers.database import ads_collection
 from bson import ObjectId
 from datetime import datetime, timedelta
-import logging
 
 logging.basicConfig(level=logging.INFO)
 
@@ -15,13 +15,7 @@ async def get_average_price_per_square_meter():
             {
                 "$project": {
                     "price": {
-                        "$toDouble": {
-                            "$reduce": {
-                                "input": {"$split": ["$price", " "]},  # Splitting by space to remove 'AZN'
-                                "initialValue": "",
-                                "in": {"$concat": ["$$value", "$$this"]}  # Joining price parts back together
-                            }
-                        }
+                        "$toDouble": {"$arrayElemAt": [{"$split": ["$price", " "]}, 0]}
                     },
                     "square_meter": {
                         "$convert": {
@@ -33,7 +27,6 @@ async def get_average_price_per_square_meter():
                     },
                 }
             },
-            {"$match": {"square_meter": {"$gt": 0}}},  # Ensure no division by zero
             {"$project": {"price_per_square_meter": {"$divide": ["$price", "$square_meter"]}}},
             {"$group": {"_id": None, "avg_price_per_sqm": {"$avg": "$price_per_square_meter"}}},
         ]
@@ -55,24 +48,11 @@ async def get_price_dynamics(days=7):
         
         pipeline = [
             {"$match": {"_id": {"$gte": ObjectId.from_datetime(start_date)}}},
-            {
-                "$group": {
-                    "_id": None,
-                    "average_price": {"$avg": {
-                        "$toDouble": {
-                            "$reduce": {
-                                "input": {"$split": ["$price", " "]},
-                                "initialValue": "",
-                                "in": {"$concat": ["$$value", "$$this"]}
-                            }
-                        }
-                    }}
-                }
-            },    
+            {"$group": {"_id": None, "average_price": {"$avg": "$price"}}},    
         ]
         
         result = await ads_collection.aggregate(pipeline).to_list(1)
-        logging.info(f"Pipeline result for price dynamics: {result}")
+        logging.info(f"Pipeline result: {result}")
         return result[0]["average_price"] if result else None
     except Exception as e:
         logging.error(f"Ошибка при расчете динамики цен: {e}")
