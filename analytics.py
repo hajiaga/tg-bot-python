@@ -6,6 +6,9 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 async def get_average_price_per_square_meter():
+    """
+    Возвращает среднюю цену за квадратный метр на основе объявлений в базе данных.
+    """
     try:
         pipeline = [
             {"$match": {"price": {"$exists": True}, "title": {"$regex": r"\d+\s*m²"}}},
@@ -13,9 +16,11 @@ async def get_average_price_per_square_meter():
                 "$project": {
                     "price": {
                         "$toDouble": {
-                            "$arrayElemAt": [
-                                {"$split": ["$price", " "]}, 0
-                            ]
+                            "$reduce": {
+                                "input": {"$split": ["$price", " "]},  # Splitting by space to remove 'AZN'
+                                "initialValue": "",
+                                "in": {"$concat": ["$$value", "$$this"]}  # Joining price parts back together
+                            }
                         }
                     },
                     "square_meter": {
@@ -37,22 +42,38 @@ async def get_average_price_per_square_meter():
         logging.info(f"Pipeline result: {result}")
         return result[0]["avg_price_per_sqm"] if result else None
     except Exception as e:
-        logging.error(f"Error calculating average price per square meter: {e}")
+        logging.error(f"Ошибка при расчете средней цены за квадратный метр: {e}")
         raise
 
 async def get_price_dynamics(days=7):
+    """
+    Возвращает динамику роста/падения цен за последние n дней.
+    """
     try:
         now = datetime.now()
         start_date = now - timedelta(days=days)
         
         pipeline = [
             {"$match": {"_id": {"$gte": ObjectId.from_datetime(start_date)}}},
-            {"$group": {"_id": None, "average_price": {"$avg": "$price"}}},    
+            {
+                "$group": {
+                    "_id": None,
+                    "average_price": {"$avg": {
+                        "$toDouble": {
+                            "$reduce": {
+                                "input": {"$split": ["$price", " "]},
+                                "initialValue": "",
+                                "in": {"$concat": ["$$value", "$$this"]}
+                            }
+                        }
+                    }}
+                }
+            },    
         ]
         
         result = await ads_collection.aggregate(pipeline).to_list(1)
-        logging.info(f"Pipeline result: {result}")
+        logging.info(f"Pipeline result for price dynamics: {result}")
         return result[0]["average_price"] if result else None
     except Exception as e:
-        logging.error(f"Error calculating price dynamics: {e}")
+        logging.error(f"Ошибка при расчете динамики цен: {e}")
         raise
